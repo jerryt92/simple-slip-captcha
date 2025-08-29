@@ -1,0 +1,374 @@
+<template>
+	<div v-loading="isLoading" class="slider-container">
+		<div
+			class="slider-canvas"
+			:style="{
+				width: `${slideInfo.width}px`,
+				height: `${slideInfo.height}px`,
+			}"
+			@click="() => {
+				showAlert = false;
+				updateSlideCaptcha()
+			}"
+		>
+			<!-- 大图 -->
+			<div
+				ref="puzzle"
+				class="puzzle-image"
+				:style="{
+					backgroundImage: `url(${slideInfo.puzzleUrl})`,
+					width: '100%',
+					height: '100%',
+					position: 'absolute',
+					top: 0,
+					left: 0,
+					backgroundSize: 'cover'
+				}"
+			/>
+			<!-- 滑块 -->
+			<div
+				ref="block"
+				class="slider-block"
+				:style="{
+					backgroundImage: `url(${slideInfo.sliderUrl})`,
+					width: slideInfo.sliderSize + 'px',
+					height: slideInfo.sliderSize + 'px',
+					top: slideInfo.blockY + 'px',
+					left: '0px',
+					position: 'absolute',
+					backgroundSize: 'cover'
+				}"
+			/>
+			<!-- 结果遮罩层 -->
+			<div
+				:class="`result-mask ${resultMask.class}`"
+				:style="{ height: `${resultMask.height}px` }"
+			/>
+		</div>
+		<!-- 拖动的滑块内容 -->
+		<div class="slider-square">
+			<div class="box">
+				<div
+					class="slider-square-icon"
+					:style="{ transform: `translateX(${slideInfo.sliderLeft}px)` }"
+					@mousedown="sliderDown"
+					@touchstart="sliderDown"
+				></div>
+				<span>{{ slideInfo.sliderText }}</span>
+			</div>
+		</div>
+	</div>
+	<div v-if="showAlert" class="custom-alert" @click="showAlert = false">
+		<div class="alert-content" :style="{ color: alertColors }">
+			<p>{{ alertMessage }}</p>
+		</div>
+	</div>
+</template>
+
+<script lang="ts" setup>
+import {onDeactivated, onMounted, reactive, ref, watch} from 'vue'
+import axios from 'axios'
+
+const showAlert = ref(false)
+const alertMessage = ref('')
+const alertColors = ref('')
+
+function showCustomAlert(message: string, color: string) {
+	alertMessage.value = message
+	alertColors.value = color
+	showAlert.value = true
+}
+
+const isLoading = ref(false)
+const props = withDefaults(defineProps<{
+	loading: boolean;
+}>(), {
+	loading: false
+})
+
+watch(() => props.loading, (newVal) => {
+	isLoading.value = newVal
+})
+
+// 定义 emits
+const emit = defineEmits<{
+	(
+		e: 'validPass',
+		value: {
+			hash: string
+			code: string
+		}
+	): void
+}>()
+
+defineExpose({
+	updateSlideCaptcha
+})
+
+const puzzle = ref(null)
+const block = ref(null)
+// 通过此值可以限制展示的宽度
+const showWidth = 300
+
+const slideInfo = ref({
+	hash: '',
+	puzzleUrl: '',
+	width: showWidth,
+	height: showWidth * 3 / 4,
+	sliderUrl: '',
+	sliderSize: 0,
+	sliderY: 0,
+	sliderLeft: 0,
+	blockX: 0,
+	blockY: 0,
+	scaleRatio: 1,
+	sliderText: ''
+})
+
+const origin = reactive({
+	originX: 0
+})
+
+const resultMask = reactive({
+	class: '',
+	height: 0
+})
+
+onMounted(() => {
+	bindEvents()
+	updateSlideCaptcha()
+})
+
+function updateSlideCaptcha() {
+	isLoading.value = true
+	// 重置时使用 transform 保持性能
+	block.value.style.transform = 'translate3d(0, 0, 0)'
+	slideInfo.value.sliderLeft = 0
+	updateSlideInfo().then(() => {
+		slideInfo.value.sliderText = '拖动滑块完成验证'
+		resultMask.height = 0
+		resultMask.class = ''
+		slideInfo.value.sliderLeft = 0
+		if (block.value) {
+			block.value.style.left = '0'
+		}
+		// 重新计算缩放比例
+		if (puzzle.value) {
+			slideInfo.value.scaleRatio = showWidth / slideInfo.value.width
+			slideInfo.value.width = slideInfo.value.width * slideInfo.value.scaleRatio
+			slideInfo.value.height = slideInfo.value.height * slideInfo.value.scaleRatio
+			slideInfo.value.blockY = slideInfo.value.blockY * slideInfo.value.scaleRatio
+			slideInfo.value.sliderSize = slideInfo.value.sliderSize * slideInfo.value.scaleRatio
+		}
+	}).finally(() => {
+		isLoading.value = false
+	})
+}
+
+function updateSlideInfo() {
+	return axios.get<{
+		hash: string
+		puzzleUrl: string
+		width: number
+		height: number
+		sliderUrl: string
+		sliderSize: number
+		sliderY: number
+	}>('/api/slide?' + new Date().getTime())
+		.then((res) => {
+			slideInfo.value.hash = res.data.hash
+			slideInfo.value.puzzleUrl = res.data.puzzleUrl
+			slideInfo.value.width = res.data.width
+			slideInfo.value.height = res.data.height
+			slideInfo.value.sliderUrl = res.data.sliderUrl
+			slideInfo.value.sliderSize = res.data.sliderSize
+			slideInfo.value.blockY = res.data.sliderY
+		})
+}
+
+function verifySlideCaptcha(sliderX: number, hash: string) {
+	return axios.get<{
+		result: boolean
+		code: string
+	}>('/api/validate', {
+		params: {
+			'slider-x': sliderX,
+			hash
+		}
+	})
+}
+
+const slider = ref(false)
+
+const sliderDown = (e) => {
+	slider.value = true
+	slideInfo.value.sliderText = ''
+	origin.originX = e.pageX || e.touches?.[0]?.pageX
+	// 预提示浏览器准备动画优化
+	block.value.style.willChange = 'transform'
+	e.preventDefault()
+}
+
+const sliderMove = (e) => {
+	if (!slider.value) return
+	const clientX = e.pageX || e.touches?.[0]?.pageX
+	if (!clientX) return
+	const moveX = clientX - origin.originX
+	const maxMoveX =
+		(slideInfo.value.width - slideInfo.value.sliderSize)
+	// 使用更精确的边界限制
+	const clampedX = Math.max(0, Math.min(moveX, maxMoveX))
+	// 使用transform和translate3d强制硬件加速
+	block.value.style.transform = `translate3d(${clampedX}px, 0, 0)`
+	slideInfo.value.sliderLeft = clampedX
+	e.preventDefault()
+}
+
+const sliderUp = () => {
+	if (!slider.value) return
+	slider.value = false
+	// 使用 will-change 预提示浏览器优化
+	block.value.style.willChange = 'auto'
+	// 按缩放率还原x坐标
+	const resultX = slideInfo.value.sliderLeft / slideInfo.value.scaleRatio
+	verifySlideCaptcha(resultX, slideInfo.value.hash).then((res) => {
+		if (res.data) {
+			emit('validPass', {
+				hash: slideInfo.value.hash,
+				code: res.data.code
+			})
+			updateSlideCaptcha()
+			showCustomAlert('验证成功', '#5ca862')
+		} else {
+			showCustomAlert('验证失败', '#ff0000')
+			updateSlideCaptcha()
+		}
+	})
+}
+
+const bindEvents = () => {
+	document.addEventListener('mousemove', sliderMove)
+	document.addEventListener('mouseup', sliderUp)
+	document.addEventListener('touchmove', sliderMove, {passive: false})
+	document.addEventListener('touchend', sliderUp)
+}
+
+onDeactivated(() => {
+	document.removeEventListener('mousemove', sliderMove)
+	document.removeEventListener('mouseup', sliderUp)
+	document.removeEventListener('touchmove', sliderMove)
+	document.removeEventListener('touchend', sliderUp)
+})
+</script>
+
+<style lang="scss">
+:root {
+	--el-color-primary: #409eff;
+}
+
+.slider-container {
+	position: relative;
+	display: inline-block;
+	flex-direction: column;
+	justify-content: center;
+	height: auto;
+	margin: 0 auto;
+	padding: 16px;
+	border-radius: 12px;
+	background: #fff;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+	.slider-canvas {
+		position: relative;
+		background-color: transparent;
+		margin-bottom: 16px;
+
+		.puzzle-image {
+			border-radius: 4px;
+		}
+
+		.slider-block {
+			z-index: 2;
+			border-radius: 4px;
+			will-change: transform;
+			backface-visibility: hidden;
+			transform: translateZ(0);
+		}
+	}
+
+	@keyframes result-show {
+		0% {
+			opacity: 0;
+		}
+		100% {
+			opacity: 0.7;
+		}
+	}
+
+	.result-mask {
+		position: absolute;
+		left: 0;
+		bottom: 0;
+		width: 100%;
+		opacity: 0.7;
+
+		&.success {
+			background-color: #52ccba;
+			animation: result-show 1s;
+		}
+
+		&.fail {
+			background-color: #f57a7a;
+			animation: result-show 1s;
+		}
+	}
+}
+
+.slider-square {
+	background-color: #f7f9fa;
+	height: 36px;
+	text-align: center;
+	line-height: 36px;
+	border: 2px solid rgba(221, 221, 221, 0.17);
+	position: relative;
+	border-radius: 4px;
+	z-index: 10;
+
+	.box {
+		padding: 0 16px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		position: relative;
+		height: 100%;
+
+		span {
+			flex: 1;
+			text-align: center;
+			color: #666;
+			font-size: 14px;
+		}
+	}
+
+	.slider-square-icon {
+		position: absolute;
+		top: 0;
+		left: 0;
+		height: 35px;
+		width: 35px;
+		background-color: color-mix(in srgb, var(--el-color-primary), transparent 10%);
+		cursor: pointer;
+		z-index: 11;
+		user-select: none;
+		will-change: transform;
+		border: none;
+		border-radius: 4px;
+
+		&:hover,
+		&:active {
+			background-color: var(--el-color-primary);
+			box-shadow: 0 0 10px var(--el-color-primary);
+		}
+	}
+}
+</style>

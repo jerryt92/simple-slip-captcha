@@ -1,0 +1,12 @@
+server:
+  port: 8080
+  servlet:
+    encoding:
+      charset: UTF-8 # 需要强制设置编码，否则SSE会出现乱码
+      force: true
+spring:
+  application:
+    name: simple-slip-captcha
+  web:
+    resources:
+      static-locations: classpath:/dist/
