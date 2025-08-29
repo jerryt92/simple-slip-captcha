@@ -356,7 +356,7 @@ onDeactivated(() => {
 		left: 0;
 		height: 35px;
 		width: 35px;
-		background-color: color-mix(in srgb, var(--el-color-primary), transparent 10%);
+		background-color: var(--el-color-primary);
 		cursor: pointer;
 		z-index: 11;
 		user-select: none;
@@ -367,7 +367,7 @@ onDeactivated(() => {
 		&:hover,
 		&:active {
 			background-color: var(--el-color-primary);
-			box-shadow: 0 0 10px var(--el-color-primary);
+			box-shadow: 0 0 5px var(--el-color-primary);
 		}
 	}
 }
