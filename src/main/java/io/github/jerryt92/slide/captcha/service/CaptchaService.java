@@ -65,7 +65,7 @@ public class CaptchaService {
         BufferedImage puzzleImage = null;
         try {
             // 获取资源目录下所有图片文件名
-            String imagesPath = "/static/captcha_images";
+            String imagesPath = "/captcha_images";
             URL dirURL = getClass().getResource(imagesPath);
             if (dirURL != null) {
                 File dir = new File(dirURL.toURI());
