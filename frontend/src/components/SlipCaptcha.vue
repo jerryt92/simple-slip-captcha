@@ -286,14 +286,6 @@ onDeactivated(() => {
 		.puzzle-image {
 			border-radius: 4px;
 		}
-
-		.slider-block {
-			z-index: 2;
-			border-radius: 4px;
-			will-change: transform;
-			backface-visibility: hidden;
-			transform: translateZ(0);
-		}
 	}
 
 	@keyframes result-show {
