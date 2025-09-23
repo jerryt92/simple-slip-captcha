@@ -105,8 +105,9 @@ defineExpose({
 	updateSlideCaptcha
 })
 
-const puzzle = ref(null)
-const block = ref(null)
+const puzzle = ref<HTMLDivElement | null>(null)
+const block = ref<HTMLDivElement | null>(null)
+
 // 通过此值可以限制展示的宽度
 const showWidth = 300
 
@@ -139,26 +140,86 @@ onMounted(() => {
 	updateSlideCaptcha()
 })
 
+function verifySlideCaptcha(sliderX: number, hash: string, track: Array<{
+	pointerX: number,
+	pointerY: number,
+	t: number
+}>) {
+	return axios.post<{
+		result: boolean
+		code: string
+	}>('/api/validate', {
+		sliderX,
+		hash,
+		track
+	})
+}
+
+const slider = ref(false)
+
+const track = ref<Array<{ pointerX: number, pointerY: number, t: number }>>([])
+
+const sliderDown = (e: MouseEvent | TouchEvent) => {
+	slider.value = true
+	slideInfo.value.sliderText = ''
+	const pageX = 'touches' in e ? e.touches[0].pageX : (e as MouseEvent).pageX
+	origin.originX = pageX
+	block.value && (block.value.style.willChange = 'transform')
+	track.value = []
+	const pageY = 'touches' in e ? e.touches[0].pageY : (e as MouseEvent).pageY
+	track.value.push({pointerX: pageX, pointerY: pageY, t: Date.now()})
+	e.preventDefault()
+}
+
+const sliderMove = (e: MouseEvent | TouchEvent) => {
+	if (!slider.value) return
+	const pageX = 'touches' in e ? e.touches[0].pageX : (e as MouseEvent).pageX
+	const pageY = 'touches' in e ? e.touches[0].pageY : (e as MouseEvent).pageY
+	const moveX = pageX - origin.originX
+	const maxMoveX = (slideInfo.value.width - slideInfo.value.sliderSize)
+	const clampedX = Math.max(0, Math.min(moveX, maxMoveX))
+	block.value && (block.value.style.transform = `translate3d(${clampedX}px,0,0)`)
+	slideInfo.value.sliderLeft = clampedX
+	// 记录真实光标位置
+	track.value.push({pointerX: pageX, pointerY: pageY, t: Date.now()})
+	e.preventDefault()
+}
+
+const sliderUp = () => {
+	if (!slider.value) return
+	slider.value = false
+	block.value && (block.value.style.willChange = 'auto')
+	const resultX = slideInfo.value.sliderLeft / slideInfo.value.scaleRatio
+	verifySlideCaptcha(resultX, slideInfo.value.hash, track.value)
+		.then((res) => {
+			if (res.data) {
+				emit('validPass', {hash: slideInfo.value.hash, code: res.data.code})
+				updateSlideCaptcha()
+				showCustomAlert('验证成功', '#5ca862')
+			} else {
+				showCustomAlert('验证失败', '#ff0000')
+				updateSlideCaptcha()
+			}
+		})
+}
+
+// updateSlideCaptcha 中使用可选链防止 null 访问
 function updateSlideCaptcha() {
 	isLoading.value = true
-	// 重置时使用 transform 保持性能
-	block.value.style.transform = 'translate3d(0, 0, 0)'
+	if (block.value) block.value.style.transform = 'translate3d(0,0,0)'
 	slideInfo.value.sliderLeft = 0
 	updateSlideInfo().then(() => {
 		slideInfo.value.sliderText = '拖动滑块完成验证'
 		resultMask.height = 0
 		resultMask.class = ''
 		slideInfo.value.sliderLeft = 0
-		if (block.value) {
-			block.value.style.left = '0'
-		}
-		// 重新计算缩放比例
+		if (block.value) block.value.style.left = '0'
 		if (puzzle.value) {
 			slideInfo.value.scaleRatio = showWidth / slideInfo.value.width
-			slideInfo.value.width = slideInfo.value.width * slideInfo.value.scaleRatio
-			slideInfo.value.height = slideInfo.value.height * slideInfo.value.scaleRatio
-			slideInfo.value.blockY = slideInfo.value.blockY * slideInfo.value.scaleRatio
-			slideInfo.value.sliderSize = slideInfo.value.sliderSize * slideInfo.value.scaleRatio
+			slideInfo.value.width *= slideInfo.value.scaleRatio
+			slideInfo.value.height *= slideInfo.value.scaleRatio
+			slideInfo.value.blockY *= slideInfo.value.scaleRatio
+			slideInfo.value.sliderSize *= slideInfo.value.scaleRatio
 		}
 	}).finally(() => {
 		isLoading.value = false
@@ -184,66 +245,6 @@ function updateSlideInfo() {
 			slideInfo.value.sliderSize = res.data.sliderSize
 			slideInfo.value.blockY = res.data.sliderY
 		})
-}
-
-function verifySlideCaptcha(sliderX: number, hash: string) {
-	return axios.get<{
-		result: boolean
-		code: string
-	}>('/api/validate', {
-		params: {
-			'slider-x': sliderX,
-			hash
-		}
-	})
-}
-
-const slider = ref(false)
-
-const sliderDown = (e) => {
-	slider.value = true
-	slideInfo.value.sliderText = ''
-	origin.originX = e.pageX || e.touches?.[0]?.pageX
-	// 预提示浏览器准备动画优化
-	block.value.style.willChange = 'transform'
-	e.preventDefault()
-}
-
-const sliderMove = (e) => {
-	if (!slider.value) return
-	const clientX = e.pageX || e.touches?.[0]?.pageX
-	if (!clientX) return
-	const moveX = clientX - origin.originX
-	const maxMoveX =
-		(slideInfo.value.width - slideInfo.value.sliderSize)
-	// 使用更精确的边界限制
-	const clampedX = Math.max(0, Math.min(moveX, maxMoveX))
-	// 使用transform和translate3d强制硬件加速
-	block.value.style.transform = `translate3d(${clampedX}px, 0, 0)`
-	slideInfo.value.sliderLeft = clampedX
-	e.preventDefault()
-}
-
-const sliderUp = () => {
-	if (!slider.value) return
-	slider.value = false
-	// 使用 will-change 预提示浏览器优化
-	block.value.style.willChange = 'auto'
-	// 按缩放率还原x坐标
-	const resultX = slideInfo.value.sliderLeft / slideInfo.value.scaleRatio
-	verifySlideCaptcha(resultX, slideInfo.value.hash).then((res) => {
-		if (res.data) {
-			emit('validPass', {
-				hash: slideInfo.value.hash,
-				code: res.data.code
-			})
-			updateSlideCaptcha()
-			showCustomAlert('验证成功', '#5ca862')
-		} else {
-			showCustomAlert('验证失败', '#ff0000')
-			updateSlideCaptcha()
-		}
-	})
 }
 
 const bindEvents = () => {

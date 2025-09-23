@@ -1,10 +1,12 @@
 package io.github.jerryt92.slide.captcha.controller;
 
+import io.github.jerryt92.slide.captcha.dto.ValidateCaptchaDto;
 import io.github.jerryt92.slide.captcha.model.SlideCaptchaResp;
 import io.github.jerryt92.slide.captcha.service.CaptchaService;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -21,8 +23,8 @@ public class CaptchaController {
         return captchaService.genSlideCaptcha();
     }
 
-    @GetMapping("/validate")
-    public String validateCaptcha(@RequestParam("slider-x") Float sliderX, @RequestParam("hash") String hash) {
-        return captchaService.verifySlideCaptchaGetCaptchaCode(sliderX, hash);
+    @PostMapping("/validate")
+    public String validateCaptcha(@RequestBody ValidateCaptchaDto validateCaptchaDto) {
+        return captchaService.verifySlideCaptchaGetCaptchaCode(validateCaptchaDto.sliderX, validateCaptchaDto.hash, validateCaptchaDto.track);
     }
 }
