@@ -25,7 +25,7 @@ Simple Slip Captcha is a project that provides sliding captcha functionality, bu
 
 ## Preview
 
-[Demo](./demo.png)
+![Demo](./demo.png)
 
 ## Environment Requirements
 
