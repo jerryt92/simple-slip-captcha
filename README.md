@@ -1,3 +1,5 @@
+简体中文 | [English](README_en.md)
+
 # Simple Slip Captcha
 
 一个基于Java Spring Boot + Vue3 的简单滑动验证码
