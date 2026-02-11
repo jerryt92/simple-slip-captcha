@@ -4,13 +4,25 @@ public class Track {
     /**
      * 光标在屏幕上的x坐标
      */
-    public float pointerX;
+    private float pointerX;
     /**
      * 光标在屏幕上的y坐标
      */
-    public float pointerY;
+    private float pointerY;
     /**
      * 时间戳，单位毫秒
      */
-    public long t;
+    private long t;
+
+    public float getPointerX() {
+        return pointerX;
+    }
+
+    public float getPointerY() {
+        return pointerY;
+    }
+
+    public long getT() {
+        return t;
+    }
 }
