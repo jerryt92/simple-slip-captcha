@@ -119,6 +119,8 @@ const showWidth = 300
 
 const slideInfo = ref({
 	hash: '',
+	powSalt: '',
+	powDifficulty: 0,
 	puzzleUrl: '',
 	width: showWidth,
 	height: showWidth * 3 / 4,
@@ -150,15 +152,35 @@ function verifySlideCaptcha(sliderX: number, hash: string, track: Array<{
 	pointerX: number,
 	pointerY: number,
 	t: number
-}>) {
+}>, powNonce: string) {
 	return axios.post<{
 		result: boolean
 		code: string
 	}>('/api/validate', {
 		sliderX,
 		hash,
-		track
+		track,
+		powNonce
 	})
+}
+
+async function sha256Hex(input: string): Promise<string> {
+	const encoder = new TextEncoder()
+	const digest = await crypto.subtle.digest('SHA-256', encoder.encode(input))
+	const bytes = Array.from(new Uint8Array(digest))
+	return bytes.map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+async function solvePow(hash: string, powSalt: string, difficulty: number): Promise<string> {
+	const target = '0'.repeat(Math.max(0, difficulty))
+	for (let nonce = 0; nonce < 2_000_000; nonce++) {
+		const nonceText = nonce.toString(16)
+		const digest = await sha256Hex(`${hash}:${powSalt}:${nonceText}`)
+		if (digest.startsWith(target)) {
+			return nonceText
+		}
+	}
+	throw new Error('PoW solve failed')
 }
 
 const slider = ref(false)
@@ -191,24 +213,30 @@ const sliderMove = (e: MouseEvent | TouchEvent) => {
 	e.preventDefault()
 }
 
-const sliderUp = () => {
+const sliderUp = async () => {
 	if (!slider.value) return
 	slider.value = false
 	block.value && (block.value.style.willChange = 'auto')
 	const resultX = slideInfo.value.sliderLeft / slideInfo.value.scaleRatio
-	verifySlideCaptcha(resultX, slideInfo.value.hash, track.value)
-		.then((res) => {
-			if (res.data) {
-				emit('validPass', {hash: slideInfo.value.hash, code: res.data.code})
-				updateSlideCaptcha()
-				showCustomAlert('验证成功', '#5ca862')
-			} else {
-				showCustomAlert('验证失败', '#ff0000')
-				updateSlideCaptcha()
-			}
-			// 绘制轨迹图
-			drawTrackChart()
-		})
+	try {
+		const powNonce = await solvePow(slideInfo.value.hash, slideInfo.value.powSalt, slideInfo.value.powDifficulty)
+		verifySlideCaptcha(resultX, slideInfo.value.hash, track.value, powNonce)
+			.then((res) => {
+				if (res.data) {
+					emit('validPass', {hash: slideInfo.value.hash, code: res.data.code})
+					updateSlideCaptcha()
+					showCustomAlert('验证成功', '#5ca862')
+				} else {
+					showCustomAlert('验证失败', '#ff0000')
+					updateSlideCaptcha()
+				}
+				// 绘制轨迹图
+				drawTrackChart()
+			})
+	} catch (_e) {
+		showCustomAlert('验证失败，请重试', '#ff0000')
+		updateSlideCaptcha()
+	}
 }
 
 // 绘制轨迹图的函数
@@ -311,6 +339,8 @@ function updateSlideCaptcha() {
 function updateSlideInfo() {
 	return axios.get<{
 		hash: string
+		powSalt: string
+		powDifficulty: number
 		puzzleUrl: string
 		width: number
 		height: number
@@ -320,6 +350,8 @@ function updateSlideInfo() {
 	}>('/api/slide?' + new Date().getTime())
 		.then((res) => {
 			slideInfo.value.hash = res.data.hash
+			slideInfo.value.powSalt = res.data.powSalt
+			slideInfo.value.powDifficulty = res.data.powDifficulty
 			slideInfo.value.puzzleUrl = res.data.puzzleUrl
 			slideInfo.value.width = res.data.width
 			slideInfo.value.height = res.data.height

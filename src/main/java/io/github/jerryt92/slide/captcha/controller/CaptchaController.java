@@ -25,6 +25,11 @@ public class CaptchaController {
 
     @PostMapping("/validate")
     public String validateCaptcha(@RequestBody ValidateCaptchaDto validateCaptchaDto) {
-        return captchaService.verifySlideCaptchaGetCaptchaCode(validateCaptchaDto.sliderX, validateCaptchaDto.hash, validateCaptchaDto.track);
+        return captchaService.verifySlideCaptchaGetCaptchaCode(
+                validateCaptchaDto.sliderX,
+                validateCaptchaDto.hash,
+                validateCaptchaDto.track,
+                validateCaptchaDto.powNonce
+        );
     }
 }

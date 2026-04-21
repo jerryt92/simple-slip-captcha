@@ -6,6 +6,7 @@ import io.github.jerryt92.slide.captcha.utils.MDUtil;
 import io.github.jerryt92.slide.captcha.utils.UUIDUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.concurrent.ConcurrentHashMap;
@@ -43,11 +45,16 @@ public class CaptchaService {
     Base64.Encoder encoder = Base64.getEncoder();
     private static final Long captchaExpireSeconds = 60L;
 
+    @Value("${captcha.pow-difficulty:4}")
+    private int powDifficulty;
+
     private static final String CAPTCHA_KEY_PREFIX = "security_captcha:";
 
     private static class CaptchaCache {
         String code;
         Float puzzleX;
+        String powSalt;
+        Integer powDifficulty;
         long expireTime;
     }
 
@@ -126,11 +133,16 @@ public class CaptchaService {
             slideCaptchaResp.setSliderUrl("data:image/png;base64," + encoder.encodeToString(bufferedImageToByteArray(sliderImage, "png")));
             slideCaptchaResp.setSliderSize(SLIDE_CAPTCHA_SLIDER_SIZE);
             slideCaptchaResp.setSliderY(y);
+            String powSalt = UUIDUtil.randomUUID();
+            slideCaptchaResp.setPowSalt(powSalt);
+            slideCaptchaResp.setPowDifficulty(powDifficulty);
             String hash = MDUtil.getMessageDigest(bufferedImageToByteArray(puzzleImage, "png"), MDUtil.MdAlgorithm.SHA1);
             slideCaptchaResp.setHash((hash));
             CaptchaCache captchaCache = new CaptchaCache();
             captchaCache.code = code;
             captchaCache.puzzleX = x;
+            captchaCache.powSalt = powSalt;
+            captchaCache.powDifficulty = powDifficulty;
             captchaCache.expireTime = System.currentTimeMillis() + captchaExpireSeconds * 1000;
             captchaCacheMap.put(CAPTCHA_KEY_PREFIX + hash, captchaCache);
             return slideCaptchaResp;
@@ -148,10 +160,11 @@ public class CaptchaService {
      * @param sliderX 用户拖动的最终X坐标 (前端传来的结果值)
      * @param hash    验证码唯一标识
      * @param track   行为轨迹数组
+     * @param powNonce PoW 随机数
      * @return 验证成功返回 code，失败返回 null
      */
-    public String verifySlideCaptchaGetCaptchaCode(Float sliderX, String hash, Track[] track) {
-        if (sliderX == null || hash == null || track == null) {
+    public String verifySlideCaptchaGetCaptchaCode(Float sliderX, String hash, Track[] track, String powNonce) {
+        if (sliderX == null || hash == null || track == null || powNonce == null || powNonce.isEmpty()) {
             return null;
         }
         // 1. 缓存层校验 (先判断是否存在，过期逻辑)
@@ -162,6 +175,10 @@ public class CaptchaService {
         // 2. 校验过期时间
         if (System.currentTimeMillis() > captchaCache.expireTime) {
             captchaCacheMap.remove(CAPTCHA_KEY_PREFIX + hash);
+            return null;
+        }
+        if (!validatePow(hash, captchaCache, powNonce)) {
+            log.warn("PoW 校验失败: hash={}", hash);
             return null;
         }
         // 3. 核心：行为轨迹算法校验
@@ -195,6 +212,32 @@ public class CaptchaService {
             log.error("验证异常", t);
         }
         return null;
+    }
+
+    private boolean validatePow(String hash, CaptchaCache captchaCache, String powNonce) {
+        if (powNonce.length() > 64 || captchaCache.powSalt == null || captchaCache.powDifficulty == null) {
+            return false;
+        }
+        try {
+            String payload = hash + ":" + captchaCache.powSalt + ":" + powNonce;
+            String digest = MDUtil.getMessageDigest(payload.getBytes(StandardCharsets.UTF_8), MDUtil.MdAlgorithm.SHA256);
+            String targetPrefix = repeatZero(captchaCache.powDifficulty);
+            return digest.startsWith(targetPrefix);
+        } catch (NoSuchAlgorithmException e) {
+            log.error("PoW digest 算法异常", e);
+            return false;
+        }
+    }
+
+    private String repeatZero(int n) {
+        if (n <= 0) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder(n);
+        for (int i = 0; i < n; i++) {
+            sb.append('0');
+        }
+        return sb.toString();
     }
 
     /**

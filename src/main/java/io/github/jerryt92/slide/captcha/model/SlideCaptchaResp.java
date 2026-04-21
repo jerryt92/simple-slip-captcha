@@ -24,6 +24,10 @@ public class SlideCaptchaResp {
 
     private @Nullable Float sliderY;
 
+    private @Nullable String powSalt;
+
+    private @Nullable Integer powDifficulty;
+
     public SlideCaptchaResp hash(String hash) {
         this.hash = hash;
         return this;
@@ -157,6 +161,34 @@ public class SlideCaptchaResp {
         this.sliderY = sliderY;
     }
 
+    public SlideCaptchaResp powSalt(String powSalt) {
+        this.powSalt = powSalt;
+        return this;
+    }
+
+    @JsonProperty("powSalt")
+    public String getPowSalt() {
+        return powSalt;
+    }
+
+    public void setPowSalt(String powSalt) {
+        this.powSalt = powSalt;
+    }
+
+    public SlideCaptchaResp powDifficulty(Integer powDifficulty) {
+        this.powDifficulty = powDifficulty;
+        return this;
+    }
+
+    @JsonProperty("powDifficulty")
+    public Integer getPowDifficulty() {
+        return powDifficulty;
+    }
+
+    public void setPowDifficulty(Integer powDifficulty) {
+        this.powDifficulty = powDifficulty;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -172,12 +204,14 @@ public class SlideCaptchaResp {
                 Objects.equals(this.height, slideCaptchaResp.height) &&
                 Objects.equals(this.sliderUrl, slideCaptchaResp.sliderUrl) &&
                 Objects.equals(this.sliderSize, slideCaptchaResp.sliderSize) &&
-                Objects.equals(this.sliderY, slideCaptchaResp.sliderY);
+                Objects.equals(this.sliderY, slideCaptchaResp.sliderY) &&
+                Objects.equals(this.powSalt, slideCaptchaResp.powSalt) &&
+                Objects.equals(this.powDifficulty, slideCaptchaResp.powDifficulty);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(hash, puzzleUrl, width, height, sliderUrl, sliderSize, sliderY);
+        return Objects.hash(hash, puzzleUrl, width, height, sliderUrl, sliderSize, sliderY, powSalt, powDifficulty);
     }
 
     @Override
@@ -191,6 +225,8 @@ public class SlideCaptchaResp {
         sb.append("    sliderUrl: ").append(toIndentedString(sliderUrl)).append("\n");
         sb.append("    sliderSize: ").append(toIndentedString(sliderSize)).append("\n");
         sb.append("    sliderY: ").append(toIndentedString(sliderY)).append("\n");
+        sb.append("    powSalt: ").append(toIndentedString(powSalt)).append("\n");
+        sb.append("    powDifficulty: ").append(toIndentedString(powDifficulty)).append("\n");
         sb.append("}");
         return sb.toString();
     }

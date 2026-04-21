@@ -4,4 +4,5 @@ public class ValidateCaptchaDto {
     public Float sliderX;
     public String hash;
     public Track[] track;
+    public String powNonce;
 }
