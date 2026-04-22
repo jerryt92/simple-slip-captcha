@@ -66,11 +66,6 @@ public class SlideCaptchaResp {
         this.puzzleUrl = puzzleUrl;
     }
 
-    public SlideCaptchaResp width(Integer width) {
-        this.width = width;
-        return this;
-    }
-
     /**
      * 凹槽图片宽度
      *

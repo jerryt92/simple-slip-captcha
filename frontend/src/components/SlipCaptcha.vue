@@ -122,15 +122,15 @@ const slideInfo = ref({
 	powSalt: '',
 	powDifficulty: 0,
 	puzzleUrl: '',
-	width: showWidth,
-	height: showWidth * 3 / 4,
+	width: 0,
+	height: 0,
 	sliderUrl: '',
 	sliderSize: 0,
 	sliderY: 0,
 	sliderLeft: 0,
 	blockX: 0,
 	blockY: 0,
-	scaleRatio: 1,
+	scaleRatio: 0,
 	sliderText: ''
 })
 
@@ -148,7 +148,7 @@ onMounted(() => {
 	updateSlideCaptcha()
 })
 
-function verifySlideCaptcha(sliderX: number, hash: string, track: Array<{
+function verifySlideCaptcha(sliderX: number, scaleRatio: number, hash: string, track: Array<{
 	pointerX: number,
 	pointerY: number,
 	t: number
@@ -158,6 +158,7 @@ function verifySlideCaptcha(sliderX: number, hash: string, track: Array<{
 		code: string
 	}>('/api/validate', {
 		sliderX,
+		scaleRatio,
 		hash,
 		track,
 		powNonce
@@ -220,7 +221,7 @@ const sliderUp = async () => {
 	const resultX = slideInfo.value.sliderLeft / slideInfo.value.scaleRatio
 	try {
 		const powNonce = await solvePow(slideInfo.value.hash, slideInfo.value.powSalt, slideInfo.value.powDifficulty)
-		verifySlideCaptcha(resultX, slideInfo.value.hash, track.value, powNonce)
+		verifySlideCaptcha(resultX, slideInfo.value.scaleRatio, slideInfo.value.hash, track.value, powNonce)
 			.then((res) => {
 				if (res.data) {
 					emit('validPass', {hash: slideInfo.value.hash, code: res.data.code})

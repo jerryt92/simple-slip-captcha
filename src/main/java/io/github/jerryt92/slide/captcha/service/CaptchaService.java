@@ -12,12 +12,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import javax.imageio.ImageIO;
-import java.awt.AlphaComposite;
-import java.awt.BasicStroke;
-import java.awt.Color;
-import java.awt.Font;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
+import java.awt.*;
 import java.awt.geom.GeneralPath;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
@@ -157,13 +152,14 @@ public class CaptchaService {
     /**
      * 验证滑块验证码
      *
-     * @param sliderX 用户拖动的最终X坐标 (前端传来的结果值)
-     * @param hash    验证码唯一标识
-     * @param track   行为轨迹数组
-     * @param powNonce PoW 随机数
+     * @param sliderX    用户拖动的最终X坐标 (前端传来的结果值)
+     * @param scaleRatio 缩放比例
+     * @param hash       验证码唯一标识
+     * @param track      行为轨迹数组
+     * @param powNonce   PoW 随机数
      * @return 验证成功返回 code，失败返回 null
      */
-    public String verifySlideCaptchaGetCaptchaCode(Float sliderX, String hash, Track[] track, String powNonce) {
+    public String verifySlideCaptchaGetCaptchaCode(Float sliderX, Float scaleRatio, String hash, Track[] track, String powNonce) {
         if (sliderX == null || hash == null || track == null || powNonce == null || powNonce.isEmpty()) {
             return null;
         }
@@ -182,7 +178,7 @@ public class CaptchaService {
             return null;
         }
         // 3. 核心：行为轨迹算法校验
-        if (!validateTrack(track)) {
+        if (!validateTrack(track, scaleRatio)) {
             log.warn("滑块轨迹校验失败: hash={}", hash);
             return null;
         }
@@ -244,7 +240,7 @@ public class CaptchaService {
      * 行为校验算法
      * * @param track 轨迹数组
      */
-    private boolean validateTrack(Track[] track) {
+    private boolean validateTrack(Track[] track, Float scaleRatio) {
         if (track == null || track.length < 5) {
             // 轨迹点过少（<5），基本可以判定为脚本直接调用接口
             log.warn("validateTrack 失败: 轨迹点过少 len={}", track == null ? 0 : track.length);
@@ -267,7 +263,7 @@ public class CaptchaService {
         // 记录倒数 1/4 阶段的速度，用于检测减速行为
         double lastStageSpeedSum = 0;
         int lastStageCount = 0;
-        int startCheckIndex = (int) (track.length * 0.75);
+        int startCheckIndex = (int) (track.length * scaleRatio);
         for (int i = 1; i < track.length; i++) {
             Track cur = track[i];
             Track prev = track[i - 1];
