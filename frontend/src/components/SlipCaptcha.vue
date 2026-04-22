@@ -54,10 +54,9 @@
 		<div class="slider-square">
 			<div class="box">
 				<div
+					ref="sliderHandle"
 					class="slider-square-icon"
 					:style="{ transform: `translateX(${slideInfo.sliderLeft}px)` }"
-					@mousedown="sliderDown"
-					@touchstart="sliderDown"
 				></div>
 				<span>{{ slideInfo.sliderText }}</span>
 			</div>
@@ -71,13 +70,17 @@
 </template>
 
 <script lang="ts" setup>
-import {onDeactivated, onMounted, reactive, ref, watch} from 'vue'
+import {onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch} from 'vue'
 import axios from 'axios'
+import {loadCryptoJs} from './cryptoJsLoader'
+
+const textEncoder = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null
 
 const showAlert = ref(false)
 const alertMessage = ref('')
 const alertColors = ref('')
 const trackChart = ref<HTMLCanvasElement | null>(null)
+const sliderHandle = ref<HTMLDivElement | null>(null)
 
 function showCustomAlert(message: string, color: string) {
 	alertMessage.value = message
@@ -164,58 +167,173 @@ function verifySlideCaptcha(scaleRatio: number, hash: string, track: Array<{
 	})
 }
 
-async function sha256Hex(input: string): Promise<string> {
-	const encoder = new TextEncoder()
-	const digest = await crypto.subtle.digest('SHA-256', encoder.encode(input))
-	const bytes = Array.from(new Uint8Array(digest))
-	return bytes.map((b) => b.toString(16).padStart(2, '0')).join('')
+function hasLeadingZeroNibblesInBytes(bytes: Uint8Array, zeroNibbles: number) {
+	const fullZeroBytes = Math.floor(zeroNibbles / 2)
+	for (let i = 0; i < fullZeroBytes; i++) {
+		if (bytes[i] !== 0) return false
+	}
+	if (zeroNibbles % 2 === 1) {
+		return ((bytes[fullZeroBytes] ?? 0) >>> 4) === 0
+	}
+	return true
+}
+
+function hasLeadingZeroNibblesInWords(words: number[], zeroNibbles: number) {
+	for (let nibbleIndex = 0; nibbleIndex < zeroNibbles; nibbleIndex++) {
+		const wordIndex = Math.floor(nibbleIndex / 8)
+		const nibbleOffset = nibbleIndex % 8
+		const shift = 28 - nibbleOffset * 4
+		if ((((words[wordIndex] ?? 0) >>> shift) & 0x0f) !== 0) return false
+	}
+	return true
 }
 
 async function solvePow(hash: string, powSalt: string, difficulty: number): Promise<string> {
-	const target = '0'.repeat(Math.max(0, difficulty))
-	for (let nonce = 0; nonce < 2_000_000; nonce++) {
-		const nonceText = nonce.toString(16)
-		const digest = await sha256Hex(`${hash}:${powSalt}:${nonceText}`)
-		if (digest.startsWith(target)) {
-			return nonceText
+	const normalizedDifficulty = Math.max(0, difficulty)
+	const inputPrefix = `${hash}:${powSalt}:`
+	if (normalizedDifficulty === 0) return '0'
+
+	if (typeof crypto !== 'undefined' && crypto.subtle && textEncoder) {
+		for (let nonce = 0; nonce < 2_000_000; nonce++) {
+			const nonceText = nonce.toString(16)
+			const digest = await crypto.subtle.digest('SHA-256', textEncoder.encode(inputPrefix + nonceText))
+			if (hasLeadingZeroNibblesInBytes(new Uint8Array(digest), normalizedDifficulty)) {
+				return nonceText
+			}
 		}
+		throw new Error('PoW solve failed')
 	}
-	throw new Error('PoW solve failed')
+
+	const cryptoJs = await loadCryptoJs()
+	if (cryptoJs?.SHA256) {
+		for (let nonce = 0; nonce < 2_000_000; nonce++) {
+			const nonceText = nonce.toString(16)
+			if (hasLeadingZeroNibblesInWords(cryptoJs.SHA256(inputPrefix + nonceText).words, normalizedDifficulty)) {
+				return nonceText
+			}
+		}
+		throw new Error('PoW solve failed')
+	}
+
+	throw new Error('SHA-256 unavailable: neither Web Crypto nor CryptoJS is available')
 }
 
 const slider = ref(false)
+const activePointerId = ref<number | null>(null)
+const activeTouchId = ref<number | null>(null)
+const prefersTouchEvents = typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0
 
 const track = ref<Array<{ pointerX: number, pointerY: number, t: number }>>([])
 
-const sliderDown = (e: MouseEvent | TouchEvent) => {
+function getTouchById(touchList: TouchList, identifier: number | null) {
+	if (identifier === null) return touchList[0] ?? null
+	for (let i = 0; i < touchList.length; i++) {
+		if (touchList[i].identifier === identifier) return touchList[i]
+	}
+	return null
+}
+
+function getEventPoint(e: PointerEvent | MouseEvent | TouchEvent, useChangedTouches = false) {
+	if ('changedTouches' in e || 'touches' in e) {
+		const touchEvent = e as TouchEvent
+		const touchList = useChangedTouches ? touchEvent.changedTouches : touchEvent.touches
+		const touch = getTouchById(touchList, activeTouchId.value)
+			?? getTouchById(useChangedTouches ? touchEvent.touches : touchEvent.changedTouches, activeTouchId.value)
+		if (!touch) return null
+		return {
+			id: touch.identifier,
+			pageX: touch.pageX,
+			pageY: touch.pageY
+		}
+	}
+	if ('pointerId' in e) {
+		return {
+			id: e.pointerId,
+			pageX: e.pageX,
+			pageY: e.pageY
+		}
+	}
+	return {
+		id: 0,
+		pageX: e.pageX,
+		pageY: e.pageY
+	}
+}
+
+function startDrag(pageX: number, pageY: number) {
 	slider.value = true
 	slideInfo.value.sliderText = ''
-	const pageX = 'touches' in e ? e.touches[0].pageX : (e as MouseEvent).pageX
 	origin.originX = pageX
 	block.value && (block.value.style.willChange = 'transform')
 	track.value = []
-	const pageY = 'touches' in e ? e.touches[0].pageY : (e as MouseEvent).pageY
 	track.value.push({pointerX: pageX, pointerY: pageY, t: Date.now()})
-	e.preventDefault()
 }
 
-const sliderMove = (e: MouseEvent | TouchEvent) => {
-	if (!slider.value) return
-	const pageX = 'touches' in e ? e.touches[0].pageX : (e as MouseEvent).pageX
-	const pageY = 'touches' in e ? e.touches[0].pageY : (e as MouseEvent).pageY
+function recordDrag(pageX: number, pageY: number) {
 	const moveX = pageX - origin.originX
 	const maxMoveX = (slideInfo.value.width - slideInfo.value.sliderSize)
 	const clampedX = Math.max(0, Math.min(moveX, maxMoveX))
 	block.value && (block.value.style.transform = `translate3d(${clampedX}px,0,0)`)
 	slideInfo.value.sliderLeft = clampedX
-	// 记录真实光标位置
 	track.value.push({pointerX: pageX, pointerY: pageY, t: Date.now()})
+}
+
+const sliderDown = (e: PointerEvent | MouseEvent | TouchEvent) => {
+	if (slider.value) return
+	if ('pointerId' in e) {
+		if (prefersTouchEvents && e.pointerType === 'touch') return
+		if (!e.isPrimary) return
+		activePointerId.value = e.pointerId
+		activeTouchId.value = null
+		const target = e.currentTarget as HTMLElement | null
+		target?.setPointerCapture?.(e.pointerId)
+		const point = getEventPoint(e)
+		if (!point) return
+		startDrag(point.pageX, point.pageY)
+		e.preventDefault()
+		return
+	}
+	const point = getEventPoint(e)
+	if (!point) return
+	activePointerId.value = null
+	activeTouchId.value = 'changedTouches' in e || 'touches' in e ? point.id : null
+	startDrag(point.pageX, point.pageY)
 	e.preventDefault()
 }
 
-const sliderUp = async () => {
+const sliderMove = (e: PointerEvent | MouseEvent | TouchEvent) => {
 	if (!slider.value) return
+	if ('pointerId' in e) {
+		if (prefersTouchEvents && e.pointerType === 'touch') return
+		if (activePointerId.value !== e.pointerId) return
+		const point = getEventPoint(e)
+		if (!point) return
+		recordDrag(point.pageX, point.pageY)
+		e.preventDefault()
+		return
+	}
+	if (activePointerId.value !== null) return
+	const point = getEventPoint(e)
+	if (!point) return
+	recordDrag(point.pageX, point.pageY)
+	e.preventDefault()
+}
+
+const sliderUp = async (e?: PointerEvent | MouseEvent | TouchEvent) => {
+	if (!slider.value) return
+	if (e && 'pointerId' in e) {
+		if (prefersTouchEvents && e.pointerType === 'touch') return
+		if (activePointerId.value !== e.pointerId) return
+	} else if (activePointerId.value !== null) {
+		return
+	}
+	const point = e ? getEventPoint(e, true) ?? getEventPoint(e) : null
+	if (point) {
+		recordDrag(point.pageX, point.pageY)
+	}
 	slider.value = false
+	activePointerId.value = null
+	activeTouchId.value = null
 	block.value && (block.value.style.willChange = 'auto')
 	try {
 		const powNonce = await solvePow(slideInfo.value.hash, slideInfo.value.powSalt, slideInfo.value.powDifficulty)
@@ -361,18 +479,35 @@ function updateSlideInfo() {
 }
 
 const bindEvents = () => {
-	document.addEventListener('mousemove', sliderMove)
-	document.addEventListener('mouseup', sliderUp)
-	document.addEventListener('touchmove', sliderMove, {passive: false})
-	document.addEventListener('touchend', sliderUp)
+	sliderHandle.value?.addEventListener('pointerdown', sliderDown, {passive: false})
+	sliderHandle.value?.addEventListener('touchstart', sliderDown, {passive: false})
+	sliderHandle.value?.addEventListener('mousedown', sliderDown, {passive: false})
+	window.addEventListener('pointermove', sliderMove, {passive: false})
+	window.addEventListener('pointerup', sliderUp)
+	window.addEventListener('pointercancel', sliderUp)
+	window.addEventListener('mousemove', sliderMove, {passive: false})
+	window.addEventListener('mouseup', sliderUp)
+	window.addEventListener('touchmove', sliderMove, {passive: false, capture: true})
+	window.addEventListener('touchend', sliderUp, {capture: true})
+	window.addEventListener('touchcancel', sliderUp, {capture: true})
 }
 
-onDeactivated(() => {
-	document.removeEventListener('mousemove', sliderMove)
-	document.removeEventListener('mouseup', sliderUp)
-	document.removeEventListener('touchmove', sliderMove)
-	document.removeEventListener('touchend', sliderUp)
-})
+const unbindEvents = () => {
+	sliderHandle.value?.removeEventListener('pointerdown', sliderDown)
+	sliderHandle.value?.removeEventListener('touchstart', sliderDown)
+	sliderHandle.value?.removeEventListener('mousedown', sliderDown)
+	window.removeEventListener('pointermove', sliderMove)
+	window.removeEventListener('pointerup', sliderUp)
+	window.removeEventListener('pointercancel', sliderUp)
+	window.removeEventListener('mousemove', sliderMove)
+	window.removeEventListener('mouseup', sliderUp)
+	window.removeEventListener('touchmove', sliderMove, true)
+	window.removeEventListener('touchend', sliderUp, true)
+	window.removeEventListener('touchcancel', sliderUp, true)
+}
+
+onDeactivated(unbindEvents)
+onBeforeUnmount(unbindEvents)
 </script>
 
 <style lang="scss">
@@ -458,6 +593,7 @@ onDeactivated(() => {
 	position: relative;
 	border-radius: 4px;
 	z-index: 10;
+	touch-action: none;
 
 	.box {
 		padding: 0 16px;
@@ -485,6 +621,9 @@ onDeactivated(() => {
 		cursor: pointer;
 		z-index: 11;
 		user-select: none;
+		-webkit-user-select: none;
+		touch-action: none;
+		-webkit-touch-callout: none;
 		will-change: transform;
 		border: none;
 		border-radius: 4px;

@@ -160,25 +160,42 @@ public class CaptchaService {
      */
     public String verifySlideCaptchaGetCaptchaCode(Float scaleRatio, String hash, Track[] track, String powNonce) {
         if (scaleRatio == null || hash == null || track == null || powNonce == null || powNonce.isEmpty()) {
+            if (log.isDebugEnabled()) {
+                log.debug("滑块验证失败: 请求参数非法, scaleRatio={}, hash={}, trackNull={}, powNonceEmpty={}",
+                        scaleRatio, hash, track == null, powNonce == null || powNonce.isEmpty());
+            }
             return null;
         }
         // 1. 缓存层校验 (先判断是否存在，过期逻辑)
         CaptchaCache captchaCache = captchaCacheMap.get(CAPTCHA_KEY_PREFIX + hash);
         if (captchaCache == null) {
+            if (log.isDebugEnabled()) {
+                log.debug("滑块验证失败: 验证码缓存不存在, hash={}", hash);
+            }
             return null;
         }
         // 2. 校验过期时间
         if (System.currentTimeMillis() > captchaCache.expireTime) {
             captchaCacheMap.remove(CAPTCHA_KEY_PREFIX + hash);
+            if (log.isDebugEnabled()) {
+                log.debug("滑块验证失败: 验证码已过期, hash={}", hash);
+            }
             return null;
         }
         if (!validatePow(hash, captchaCache, powNonce)) {
             log.warn("PoW 校验失败: hash={}", hash);
+            if (log.isDebugEnabled()) {
+                log.debug("滑块验证失败: PoW 校验未通过, hash={}", hash);
+            }
             return null;
         }
         // 3. 核心：行为轨迹算法校验
         if (!validateTrack(track, scaleRatio)) {
             log.warn("滑块轨迹校验失败: hash={}", hash);
+            if (log.isDebugEnabled()) {
+                log.debug("滑块验证失败: 行为轨迹校验未通过, hash={}, trackLength={}, scaleRatio={}",
+                        hash, track.length, scaleRatio);
+            }
             return null;
         }
 
@@ -199,6 +216,10 @@ public class CaptchaService {
                     captchaCacheMap.put(CAPTCHA_KEY_PREFIX + hash, captchaCache);
                     log.info("滑块验证成功: hash={}", hash);
                     return code;
+                }
+                if (log.isDebugEnabled()) {
+                    log.debug("滑块验证失败: 位移不匹配, hash={}, startX={}, endX={}, scaleRatio={}, expectedPuzzleX={}",
+                            hash, startX, endX, scaleRatio, puzzleX);
                 }
             } else {
                 // 如果 puzzleX 已经是 null，说明之前已经验证通过了，防止重复使用旧 Token
