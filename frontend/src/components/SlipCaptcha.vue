@@ -148,7 +148,7 @@ onMounted(() => {
 	updateSlideCaptcha()
 })
 
-function verifySlideCaptcha(sliderX: number, scaleRatio: number, hash: string, track: Array<{
+function verifySlideCaptcha(scaleRatio: number, hash: string, track: Array<{
 	pointerX: number,
 	pointerY: number,
 	t: number
@@ -157,7 +157,6 @@ function verifySlideCaptcha(sliderX: number, scaleRatio: number, hash: string, t
 		result: boolean
 		code: string
 	}>('/api/validate', {
-		sliderX,
 		scaleRatio,
 		hash,
 		track,
@@ -218,10 +217,9 @@ const sliderUp = async () => {
 	if (!slider.value) return
 	slider.value = false
 	block.value && (block.value.style.willChange = 'auto')
-	const resultX = slideInfo.value.sliderLeft / slideInfo.value.scaleRatio
 	try {
 		const powNonce = await solvePow(slideInfo.value.hash, slideInfo.value.powSalt, slideInfo.value.powDifficulty)
-		verifySlideCaptcha(resultX, slideInfo.value.scaleRatio, slideInfo.value.hash, track.value, powNonce)
+		verifySlideCaptcha(slideInfo.value.scaleRatio, slideInfo.value.hash, track.value, powNonce)
 			.then((res) => {
 				if (res.data) {
 					emit('validPass', {hash: slideInfo.value.hash, code: res.data.code})

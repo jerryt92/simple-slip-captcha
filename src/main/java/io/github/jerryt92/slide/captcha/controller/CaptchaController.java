@@ -26,7 +26,7 @@ public class CaptchaController {
     @PostMapping("/validate")
     public String validateCaptcha(@RequestBody ValidateCaptchaDto validateCaptchaDto) {
         return captchaService.verifySlideCaptchaGetCaptchaCode(
-                validateCaptchaDto.sliderX,
+                validateCaptchaDto.scaleRatio,
                 validateCaptchaDto.hash,
                 validateCaptchaDto.track,
                 validateCaptchaDto.powNonce

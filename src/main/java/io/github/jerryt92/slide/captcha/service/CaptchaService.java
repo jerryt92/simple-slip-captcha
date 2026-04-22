@@ -152,15 +152,14 @@ public class CaptchaService {
     /**
      * 验证滑块验证码
      *
-     * @param sliderX    用户拖动的最终X坐标 (前端传来的结果值)
      * @param scaleRatio 缩放比例
      * @param hash       验证码唯一标识
      * @param track      行为轨迹数组
      * @param powNonce   PoW 随机数
      * @return 验证成功返回 code，失败返回 null
      */
-    public String verifySlideCaptchaGetCaptchaCode(Float sliderX, Float scaleRatio, String hash, Track[] track, String powNonce) {
-        if (sliderX == null || hash == null || track == null || powNonce == null || powNonce.isEmpty()) {
+    public String verifySlideCaptchaGetCaptchaCode(Float scaleRatio, String hash, Track[] track, String powNonce) {
+        if (scaleRatio == null || hash == null || track == null || powNonce == null || powNonce.isEmpty()) {
             return null;
         }
         // 1. 缓存层校验 (先判断是否存在，过期逻辑)
@@ -190,7 +189,10 @@ public class CaptchaService {
             // puzzleX != null 说明还没被验证过
             if (null != puzzleX) {
                 // 4. 校验最终结果准确度 (允许 5px 误差)
-                if (Math.abs(sliderX - puzzleX) < 5) {
+                Float startX = track[0].getPointerX();
+                Float endX = track[track.length - 1].getPointerX();
+                // 计算前后的真实滑块X坐标
+                if (Math.abs((endX - startX) / scaleRatio - puzzleX) < 5) {
                     // 标记为“已验证”：将 puzzleX 置空 (根据你的业务逻辑)
                     captchaCache.puzzleX = null;
                     // 更新缓存
