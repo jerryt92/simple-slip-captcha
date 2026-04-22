@@ -11,4 +11,4 @@ spring:
     resources:
       static-locations: classpath:/dist/
 captcha:
-  pow-difficulty: 4 # PoW难度系数
+  pow-difficulty: 5 # PoW难度系数

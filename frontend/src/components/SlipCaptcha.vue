@@ -194,7 +194,7 @@ async function solvePow(hash: string, powSalt: string, difficulty: number): Prom
 	if (normalizedDifficulty === 0) return '0'
 
 	if (typeof crypto !== 'undefined' && crypto.subtle && textEncoder) {
-		for (let nonce = 0; nonce < 2_000_000; nonce++) {
+		for (let nonce = 0; nonce < 5_000_000; nonce++) {
 			const nonceText = nonce.toString(16)
 			const digest = await crypto.subtle.digest('SHA-256', textEncoder.encode(inputPrefix + nonceText))
 			if (hasLeadingZeroNibblesInBytes(new Uint8Array(digest), normalizedDifficulty)) {
