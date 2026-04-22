@@ -24,6 +24,7 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -39,6 +40,7 @@ public class CaptchaService {
     private static final int SLIDE_CAPTCHA_SLIDER_SIZE = 50;
     Base64.Encoder encoder = Base64.getEncoder();
     private static final Long captchaExpireSeconds = 60L;
+    private static final SecureRandom secureRandom = new SecureRandom();
 
     @Value("${captcha.pow-difficulty:4}")
     private int powDifficulty;
@@ -74,7 +76,7 @@ public class CaptchaService {
                 File[] files = dir.listFiles((d, name) -> name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg"));
                 if (files != null && files.length > 0) {
                     // 随机选取一个文件
-                    File randomFile = files[(int) (Math.random() * files.length)];
+                    File randomFile = files[(int) (secureRandom.nextFloat() * files.length)];
                     InputStream bgStream = new FileInputStream(randomFile);
                     puzzleImage = ImageIO.read(bgStream);
                     if (puzzleImage != null) {
@@ -110,8 +112,8 @@ public class CaptchaService {
             puzzleG.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             sliderG.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             // 随机生成凹槽位置
-            float x = (float) ((0.7 * Math.random() + 0.2) * (SLIDE_CAPTCHA_WIDTH - SLIDE_CAPTCHA_SLIDER_SIZE));
-            float y = (float) ((0.8 * Math.random() + 0.1) * (SLIDE_CAPTCHA_HEIGHT - SLIDE_CAPTCHA_SLIDER_SIZE));
+            float x = (float) ((0.7 * secureRandom.nextFloat() + 0.2) * (SLIDE_CAPTCHA_WIDTH - SLIDE_CAPTCHA_SLIDER_SIZE));
+            float y = (float) ((0.8 * secureRandom.nextFloat() + 0.1) * (SLIDE_CAPTCHA_HEIGHT - SLIDE_CAPTCHA_SLIDER_SIZE));
             // 创建凹槽路径
             GeneralPath puzzlePath = createPuzzlePath(puzzleG, x, y, SLIDE_CAPTCHA_SLIDER_SIZE);
             // 绘制凹槽
@@ -414,19 +416,19 @@ public class CaptchaService {
             g2d = image.createGraphics();
         }
         // 随机选择文本颜色
-        Color randomColor = new Color((int) (Math.random() * 0x1000000));
+        Color randomColor = new Color((int) (secureRandom.nextFloat() * 0x1000000));
         g2d.setColor(randomColor);
         // 随机选择字体样式和大小
-        int fontStyle = (int) (Math.random() * 4); // 随机选择字体样式 (0-PLAIN, 1-BOLD, 2-ITALIC, 3-BOLD+ITALIC)
-        int fontSize = (int) ((double) height / 6 + Math.random() * 20) + 20; // 随机字体大小 (20-40)
+        int fontStyle = (int) (secureRandom.nextFloat() * 4); // 随机选择字体样式 (0-PLAIN, 1-BOLD, 2-ITALIC, 3-BOLD+ITALIC)
+        int fontSize = (int) ((double) height / 6 + secureRandom.nextFloat() * 20) + 20; // 随机字体大小 (20-40)
         Font newFont = new Font(font.getName(), fontStyle, fontSize);
         g2d.setFont(newFont);
         // 获取字体的宽度和高度
         int textWidth = g2d.getFontMetrics().stringWidth(text);
         int textHeight = g2d.getFontMetrics().getHeight();
         // 随机生成文本位置
-        int x = (int) (Math.random() * (width - textWidth)); // 随机水平位置
-        int y = (int) (Math.random() * (height - textHeight)) + textHeight; // 随机垂直位置
+        int x = (int) (secureRandom.nextFloat() * (width - textWidth)); // 随机水平位置
+        int y = (int) (secureRandom.nextFloat() * (height - textHeight)) + textHeight; // 随机垂直位置
         // 绘制文本
         g2d.drawString(text, x, y);
         // 添加彩色噪声纹理
@@ -438,20 +440,20 @@ public class CaptchaService {
     private void addNoiseTexture(Graphics2D g2d, int width, int height) {
         // 添加彩色点
         for (int i = 0; i < 200; i++) { // 增加点的数量
-            int x = (int) (Math.random() * width);
-            int y = (int) (Math.random() * height);
-            Color randomColor = new Color((int) (Math.random() * 0x1000000));
+            int x = (int) (secureRandom.nextFloat() * width);
+            int y = (int) (secureRandom.nextFloat() * height);
+            Color randomColor = new Color((int) (secureRandom.nextFloat() * 0x1000000));
             g2d.setColor(randomColor);
-            int diameter = 2 + (int) (Math.random() * 1); // 点的大小在 3-5 像素之间
+            int diameter = 2 + (int) (secureRandom.nextFloat() * 1); // 点的大小在 3-5 像素之间
             g2d.fillOval(x, y, diameter, diameter); // 使用圆形点
         }
         // 添加随机颜色的线条
         for (int i = 0; i < 20; i++) { // 增加线条数量
-            int x1 = (int) (Math.random() * width);
-            int y1 = (int) (Math.random() * height);
-            int x2 = (int) (Math.random() * width);
-            int y2 = (int) (Math.random() * height);
-            Color randomColor = new Color((int) (Math.random() * 0x1000000));
+            int x1 = (int) (secureRandom.nextFloat() * width);
+            int y1 = (int) (secureRandom.nextFloat() * height);
+            int x2 = (int) (secureRandom.nextFloat() * width);
+            int y2 = (int) (secureRandom.nextFloat() * height);
+            Color randomColor = new Color((int) (secureRandom.nextFloat() * 0x1000000));
             g2d.setColor(randomColor);
             g2d.drawLine(x1, y1, x2, y2);
         }
