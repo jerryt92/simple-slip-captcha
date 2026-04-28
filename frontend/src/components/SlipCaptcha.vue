@@ -74,8 +74,6 @@ import {onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch} from 'v
 import axios from 'axios'
 import {loadCryptoJs} from './cryptoJsLoader'
 
-const textEncoder = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null
-
 const showAlert = ref(false)
 const alertMessage = ref('')
 const alertColors = ref('')
@@ -167,17 +165,6 @@ function verifySlideCaptcha(scaleRatio: number, hash: string, track: Array<{
 	})
 }
 
-function hasLeadingZeroNibblesInBytes(bytes: Uint8Array, zeroNibbles: number) {
-	const fullZeroBytes = Math.floor(zeroNibbles / 2)
-	for (let i = 0; i < fullZeroBytes; i++) {
-		if (bytes[i] !== 0) return false
-	}
-	if (zeroNibbles % 2 === 1) {
-		return ((bytes[fullZeroBytes] ?? 0) >>> 4) === 0
-	}
-	return true
-}
-
 function hasLeadingZeroNibblesInWords(words: number[], zeroNibbles: number) {
 	for (let nibbleIndex = 0; nibbleIndex < zeroNibbles; nibbleIndex++) {
 		const wordIndex = Math.floor(nibbleIndex / 8)
@@ -193,20 +180,9 @@ async function solvePow(hash: string, powSalt: string, difficulty: number): Prom
 	const inputPrefix = `${hash}:${powSalt}:`
 	if (normalizedDifficulty === 0) return '0'
 
-	if (typeof crypto !== 'undefined' && crypto.subtle && textEncoder) {
-		for (let nonce = 0; nonce < 5_000_000; nonce++) {
-			const nonceText = nonce.toString(16)
-			const digest = await crypto.subtle.digest('SHA-256', textEncoder.encode(inputPrefix + nonceText))
-			if (hasLeadingZeroNibblesInBytes(new Uint8Array(digest), normalizedDifficulty)) {
-				return nonceText
-			}
-		}
-		throw new Error('PoW solve failed')
-	}
-
 	const cryptoJs = await loadCryptoJs()
 	if (cryptoJs?.SHA256) {
-		for (let nonce = 0; nonce < 2_000_000; nonce++) {
+		for (let nonce = 0; nonce < 5_000_000; nonce++) {
 			const nonceText = nonce.toString(16)
 			if (hasLeadingZeroNibblesInWords(cryptoJs.SHA256(inputPrefix + nonceText).words, normalizedDifficulty)) {
 				return nonceText
@@ -215,7 +191,7 @@ async function solvePow(hash: string, powSalt: string, difficulty: number): Prom
 		throw new Error('PoW solve failed')
 	}
 
-	throw new Error('SHA-256 unavailable: neither Web Crypto nor CryptoJS is available')
+	throw new Error('SHA-256 unavailable: CryptoJS is unavailable')
 }
 
 const slider = ref(false)
